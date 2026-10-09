@@ -155,8 +155,8 @@ tick();setInterval(tick,1000);
 const F=["q","fs","fu","fp","fe"];F.forEach(i=>$("#"+i).oninput=render);
 $("#clr").onclick=()=>{F.forEach(i=>$("#"+i).value="");render()};
 function render(){const q=norm($("#q").value),fs=$("#fs").value,fu=$("#fu").value,fp=$("#fp").value,fe=$("#fe").value,adm=isAdm();
- const l=ops.filter(o=>(!q||norm([o.op,o.cod,o.desc,o.status,o.obs].join(" ")).includes(q))&&(!fs||o.status===fs)&&(!fu||o.um===fu)&&(!fp||o.dp===fp)&&(!fe||o.de===fe))
- .sort((a,b)=>(a.dp||"9999").localeCompare(b.dp||"9999")||String(a.op).localeCompare(String(b.op),"pt",{numeric:true}));
+ const fo={};ops.forEach(o=>{const d=o.dp||"",v=o.ord??1e9;if(!(d in fo)||v<fo[d])fo[d]=v});const l=ops.filter(o=>(!q||norm([o.op,o.cod,o.desc,o.status,o.obs].join(" ")).includes(q))&&(!fs||o.status===fs)&&(!fu||o.um===fu)&&(!fp||o.dp===fp)&&(!fe||o.de===fe))
+ .sort((a,b)=>(fo[a.dp||""]-fo[b.dp||""])||(a.dp||"9999").localeCompare(b.dp||"9999")||((a.ord??1e9)-(b.ord??1e9))||String(a.op).localeCompare(String(b.op),"pt",{numeric:true}));
  $("#cnt").textContent=l.length+" de "+ops.length+" registros";vis=l.map(o=>o.id);const cn={};l.forEach(o=>cn[o.dp||""]=(cn[o.dp||""]||0)+1);for(const k of [...sel])if(!ops.some(o=>o.id===k))sel.delete(k);queueMicrotask(updBar);
  $("#tb").innerHTML=l.length?l.map((o,k)=>{const i=Math.max(0,ST.indexOf(o.status)),nx=l[k+1];const r=`<tr><td class="sc"><input type="checkbox" data-s="${esc(o.id)}"${sel.has(o.id)?" checked":""}></td><td><b>${fd(o.dp)}</b></td><td><b>${fd(o.de)}</b></td><td>${esc(o.op)}</td><td>${esc(o.cod)}</td><td class="d">${esc(o.desc)}</td><td><b>${esc(o.um)}</b></td><td class="n"><b>${fn(o.qp)}</b></td><td class="n">${fn(o.qe)}</td><td><span class="st ${SC[i]}">${esc(o.status)}</span></td><td>${esc(o.obs)}</td><td class="ac"><button class="ic" title="Editar" data-e="${esc(o.id)}">✎</button>${adm?`<button class="ic" title="Excluir" data-x="${esc(o.id)}">🗑</button>`:""}</td></tr>`;return(nx&&(nx.dp||"")===(o.dp||""))?r:r+endRow(o.dp,cn[o.dp||""])}).join(""):`<tr><td colspan="12" class="emp">Nenhuma ordem encontrada. ${isAdm()?"Use “Importar planilha” para carregar as OPs.":""}</td></tr>`}
 $("#tb").onclick=async e=>{const b=e.target.closest("button");if(!b)return;
@@ -175,7 +175,7 @@ function openM(o){editId=o?o.id:null;$("#mt").textContent=o?"Editar OP":"Nova OP
 $("#nw").onclick=()=>openM(null);const cl=()=>$("#ov").classList.add("hide");$("#mx").onclick=$("#mc").onclick=cl;
 $("#ms").onclick=async()=>{const o={};for(const k in M){const v=$("#"+k).value;o[M[k]]=k==="ep"||k==="ef"?(v===""?"":Number(v)):v.trim()}
  if(!o.op||!o.cod||!o.desc||o.qp==="")return toast("Preencha os campos obrigatórios (*)");
- try{await db.doc("ops/"+(editId||opid(o.op))).set(o);cl();toast("Salvo")}catch(x){toast("Erro ao salvar: "+(x.message||x.code))}};
+ try{await db.doc("ops/"+(editId||opid(o.op))).set(o,{merge:true});cl();toast("Salvo")}catch(x){toast("Erro ao salvar: "+(x.message||x.code))}};
 $("#imp").onclick=()=>$("#fi").click();
 const iso=v=>{if(v==null||v==="")return"";if(v instanceof Date)return new Date(v.getTime()-v.getTimezoneOffset()*6e4).toISOString().slice(0,10);
  const s=String(v).trim(),y=new Date().getFullYear();let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
@@ -190,7 +190,7 @@ $("#fi").onchange=async ev=>{const f=ev.target.files[0];if(!f)return;
   const H=r[hi].map(norm),c=k=>H.findIndex(h=>h.includes(k)),ix={dp:c("data plan"),de:c("data efet"),op:H.findIndex(h=>/op/.test(h)&&h.length<8),cod:c("cod"),desc:c("descri"),um:H.findIndex(h=>h==="um."||h==="um"),qp:c("qty plan"),qe:c("qty efet"),st:c("status"),obs:c("observ")};
   const ex=Object.fromEntries(ops.map(o=>[o.id,o]));let n=0,jobs=[];
   for(const x of r.slice(hi+1)){if(!x[ix.op])continue;const id=opid(x[ix.op]),old=ex[id];
-   const o={op:String(x[ix.op]).trim(),dp:iso(x[ix.dp]),de:iso(x[ix.de]),cod:String(x[ix.cod]).trim(),desc:String(x[ix.desc]).trim(),um:String(x[ix.um]).trim(),qp:num(x[ix.qp]),qe:num(x[ix.qe]),
+   const o={ord:n,op:String(x[ix.op]).trim(),dp:iso(x[ix.dp]),de:iso(x[ix.de]),cod:String(x[ix.cod]).trim(),desc:String(x[ix.desc]).trim(),um:String(x[ix.um]).trim(),qp:num(x[ix.qp]),qe:num(x[ix.qe]),
     status:old?old.status:mapSt(x[ix.st]),obs:old?old.obs||"":String(x[ix.obs]||"")};
    jobs.push(db.doc("ops/"+id).set(o));n++;if(jobs.length>=10){await Promise.all(jobs);jobs=[]}}
   await Promise.all(jobs);toast(n+" OPs importadas (status já editados foram preservados)")
